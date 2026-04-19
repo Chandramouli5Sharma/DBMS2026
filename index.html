@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart City Parking & EV</title>
+
+<!-- ====================================================================== -->
+<!--                            SHARED STYLES & CSS                         -->
+<!-- ====================================================================== -->
+<style>
+  :root {
+    /* --- Default / Parking Theme (Updated to EV Green Theme) --- */
+    --primary: #16a34a;         /* Green 600 */
+    --primary-dark: #15803d;    /* Green 700 */
+    --bg-grad: linear-gradient(135deg, #dcfce7, #f0fdf4);
+    --card-bg: white;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --success: #22c55e;
+    --danger: #ef4444;
+    
+    /* --- EV Theme (Green) overrides applied via JS --- */
+    --ev-primary: #16a34a;      /* Green 600 */
+    --ev-primary-dark: #15803d; /* Green 700 */
+    --ev-bg-grad: linear-gradient(135deg, #dcfce7, #f0fdf4);
+    --ev-accent: #f59e0b;       /* Amber for lightning */
+  }
+
+  * { box-sizing: border-box; font-family: "Segoe UI", Arial, sans-serif; }
+
+  body {
+    background: var(--bg-grad);
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+    color: var(--text-main);
+    transition: background 0.5s ease;
+  }
+
+  /* Theme Override Class */
+  body.ev-mode { background: var(--ev-bg-grad); }
+
+  /* --- Navigation --- */
+  .nav-bar {
+    display: none; /* Hidden on login */
+    background: white;
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    margin-bottom: 25px;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .nav-links button {
+    background: transparent;
+    color: var(--text-muted);
+    margin-left: 10px;
+    width: auto;
+    padding: 8px 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  
+  .nav-links button.active { background: var(--primary); color: white; }
+  body.ev-mode .nav-links button.active { background: var(--ev-primary); }
+
+  /* --- View Management --- */
+  .view-section {
+    display: none;
+    max-width: 1000px;
+    margin: auto;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .view-section.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card-bg);
+    padding: 25px;
+    border-radius: 14px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  }
+
+  /* --- Typography & Headers --- */
+  h1, h2, h3 { margin-top: 0; text-align: center; }
+  
+  .ev-header { 
+    color: var(--ev-primary-dark); 
+    display: flex; align-items: center; justify-content: center; 
+    gap: 10px; margin-bottom: 25px; 
+  }
+
+  /* --- Inputs & Buttons --- */
+  label { display: block; font-weight: 600; font-size: 14px; margin-top: 15px; color: var(--text-main); }
+  
+  select, input, button {
+    width: 100%; padding: 12px; margin-top: 8px; 
+    border: 1px solid #cbd5e1; border-radius: 8px; 
+    font-size: 15px; outline: none;
+  }
+
+  /* Focus States */
+  input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1); }
+  body.ev-mode input:focus, body.ev-mode select:focus { border-color: var(--ev-primary); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1); }
+
+  /* Primary Button */
+  button.primary-btn { 
+    background: var(--primary); color: white; border: none; 
+    font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; 
+  }
+  button.primary-btn:hover { background: var(--primary-dark); }
+  
+  body.ev-mode button.primary-btn { background: var(--ev-primary); }
+  body.ev-mode button.primary-btn:hover { background: var(--ev-primary-dark); }
+  
+  button.danger-btn { background: var(--danger); color: white; border: none; cursor: pointer; }
+
+  /* --- Helpers --- */
+  .now-btn-container { display: flex; gap: 10px; align-items: flex-end; }
+  .now-btn-container button { width: auto; margin-top: 8px; background: #64748b; color: white; cursor: pointer; border: none; }
+
+  .radio-group { display: flex; gap: 20px; margin-top: 10px; padding: 10px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; }
+  .radio-group label { margin-top: 0; display: flex; align-items: center; cursor: pointer; font-weight: normal; }
+  .radio-group input[type="radio"] { width: auto; margin: 0 8px 0 0; }
+
+  .summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+  .summary-row:last-child { border-bottom: none; }
+
+  /* --- GRID SYSTEM --- */
+  .slots { display: grid; gap: 12px; margin-top: 20px; }
+  .parking-slots-grid { grid-template-columns: repeat(5, 1fr); }
+  .ev-slots-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* --- SLOT DESIGN: COMMON --- */
+  .slot {
+    background: var(--success); color: white;
+    padding: 10px 5px; border-radius: 10px;
+    text-align: center; cursor: pointer; transition: transform 0.1s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 80px;
+  }
+  .slot span.slot-number { font-size: 1.2em; font-weight: bold; display: block; }
+  .slot small { display: block; font-size: 11px; margin-top: 4px; font-weight: 600; }
+
+  /* Parking Specific (White text) */
+  .slot:not(.ev-card) small { color: rgba(255, 255, 255, 0.95); }
+
+  /* --- SLOT DESIGN: EV SPECIFIC --- */
+  .slot.ev-card {
+    background: white; 
+    border: 1px solid var(--success); 
+    color: var(--ev-primary-dark);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .slot.ev-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+  
+  .slot.ev-card i { 
+    color: var(--ev-accent); font-style: normal; 
+    font-size: 1.4em; margin-bottom: 4px; 
+  }
+  .slot.ev-card .slot-id { font-size: 16px; font-weight: 700; color: var(--ev-primary-dark); }
+  .slot.ev-card small { color: var(--success); } /* Green status text */
+
+  /* --- STATES (Busy / Selected) --- */
+  /* Parking Busy */
+  .slot.busy { 
+    background: var(--danger); border-color: var(--danger); 
+    color: white; cursor: not-allowed; opacity: 0.9; 
+  }
+  
+  /* EV Busy */
+  .slot.ev-card.busy { background: var(--danger); border-color: var(--danger); }
+  .slot.ev-card.busy .slot-id, .slot.ev-card.busy small, .slot.ev-card.busy i { color: white; }
+
+  /* Selection Highlighting */
+  .slot.selected { 
+    box-shadow: 0 0 0 3px #fbbf24; transform: scale(1.05); z-index: 2; position: relative; 
+  }
+  .slot.ev-card.selected { 
+    background: #f0fdf4; border: 2px solid var(--ev-primary); 
+  }
+
+  /* --- BOOKINGS TABLE --- */
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+  th { background: #f1f5f9; color: var(--text-main); font-weight: 600; }
+  tr:hover { background: #f8fafc; }
+  
+  .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+  .badge-park { background: #dcfce7; color: #166534; }
+  .badge-ev { background: #dcfce7; color: #166534; }
+  
+  #login-card { max-width: 400px; margin: 10vh auto; }
+</style>
+</head>
+<body>
+
+<!-- ====================================================================== -->
+<!--                    PART 1: LOGIN & DASHBOARD                           -->
+<!-- ====================================================================== -->
+
+<!-- SHARED NAVIGATION -->
+<nav class="nav-bar" id="mainNav">
+  <div style="font-weight:bold; font-size: 1.2rem; color: var(--primary-dark)">🚗 SmartCity</div>
+  <div class="nav-links">
+    <button onclick="showView('dashboard')" id="btn-dashboard" class="active">Dashboard</button>
+    <button onclick="showView('parking')" id="btn-parking">Smart Parking</button>
+    <button onclick="showView('ev')" id="btn-ev">EV Charging</button>
+    <button onclick="logout()" style="color: var(--danger)">Logout</button>
+  </div>
+</nav>
+
+<!-- LOGIN VIEW -->
+<div id="view-login" class="view-section active">
+  <div class="card" id="login-card">
+    <h2 class="ev-header">Welcome Back</h2>
+    <p style="text-align:center; color:#666; margin-bottom:20px;">Please login to continue</p>
+    <label>Username</label>
+    <input type="text" id="loginId" placeholder="e.g. user1">
+    <label>Password</label>
+    <input type="password" id="loginPass" placeholder="••••••••">
+    <button class="primary-btn" onclick="performLogin()">Login</button>
+  </div>
+</div>
+
+<!-- DASHBOARD VIEW -->
+<div id="view-dashboard" class="view-section">
+  <h1 class="ev-header">👤 User Dashboard</h1>
+  <div class="container" style="grid-template-columns: 1fr; gap: 20px;">
+    <!-- Profile Info -->
+    <div class="card">
+      <h3 style="text-align:left; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">Profile Details</h3>
+      <div class="summary-row"><span>Username:</span> <span id="prof-username" style="font-weight:bold"></span></div>
+      <div class="summary-row"><span>Full Name:</span> <span id="prof-name" style="font-weight:bold"></span></div>
+      <div class="summary-row"><span>Email ID:</span> <span id="prof-email" style="font-weight:bold"></span></div>
+      <div class="summary-row"><span>Phone Number:</span> <span id="prof-phone" style="font-weight:bold"></span></div>
+    </div>
+    
+    <!-- Previous Bookings -->
+    <div class="card">
+      <h3 style="text-align:left; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">My Previous Bookings</h3>
+      <div style="overflow-x: auto;">
+        <table id="bookingsTable">
+          <thead>
+            <tr>
+              <th>Booking ID</th>
+              <th>Type</th>
+              <th>Location</th>
+              <th>Slot/ID</th>
+              <th>Car No.</th>
+              <th>Start Time</th>
+              <th>End Time</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="noBookingsMsg" style="text-align:center; padding:20px; color:#666;">No active bookings found.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!--                    PART 2: SMART PARKING                               -->
+<!-- ====================================================================== -->
+<div id="view-parking" class="view-section">
+  <h1 class="ev-header">🅿️ Smart Parking Reservation</h1>
+  <div class="container">
+    <div class="card">
+      <label>Select Zone</label>
+      <select id="p_area">
+        <option value="Mall Level 1">Mall Level 1</option>
+        <option value="City Center A">City Center A</option>
+        <option value="Airport Zone">Airport Zone</option>
+      </select>
+      <label>Choose a Spot</label>
+      <div class="slots parking-slots-grid" id="p_slots"></div>
+      <div style="margin-top:15px; font-size:12px; color:#666; text-align:center; display:flex; justify-content:center; gap:15px;">
+         <span>🟩 Available</span> <span>🟥 Occupied</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="text-align:left; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:20px;">Booking Details</h3>
+      <div style="margin-bottom: 20px; background: #f8fafc; padding: 15px; border-radius: 8px;">
+        <div class="summary-row"><span>Area:</span> <span id="p_dArea" style="font-weight:bold">Mall Level 1</span></div>
+        <div class="summary-row"><span>Spot:</span> <span id="p_dSlot" style="font-weight:bold">—</span></div>
+      </div>
+      <label>Car Registration Number</label>
+      <input type="text" id="p_reg" placeholder="e.g. MH-01-AB-1234" style="text-transform: uppercase;">
+      <label>Start Date & Time</label>
+      <div class="now-btn-container">
+        <input type="datetime-local" id="p_start">
+        <button onclick="setNow('p_start')" title="Set to current time">Now</button>
+      </div>
+      <label>Duration</label>
+      <select id="p_hours"></select>
+      
+      <div style="margin-top:20px; padding:15px; background:#f0fdf4; border: 1px solid #bbf7d0; border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+          <span style="font-size:14px; color: var(--primary-dark)"><b>End Time:</b></span>
+          <span id="p_dEnd" style="font-size:14px; color: var(--primary-dark)">—</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; border-top: 1px dashed #bbf7d0; padding-top: 8px;">
+          <span style="font-size:16px; color: var(--primary-dark)"><b>Total Charges:</b></span>
+          <span style="font-size:16px; font-weight:bold; color: var(--primary-dark)">₹<span id="p_cost">0</span></span>
+        </div>
+      </div>
+      <button class="primary-btn" onclick="confirmAndPay('parking')">Confirm & Pay</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!--                    PART 3: EV CHARGING                                 -->
+<!-- ====================================================================== -->
+<div id="view-ev" class="view-section">
+  <h1 class="ev-header">⚡ EV Charging Station Reservation</h1>
+  <div class="container">
+    <div class="card">
+      <label>Select Station Location</label>
+      <select id="ev_area">
+        <option value="Tech Park Hub">Tech Park Hub</option>
+        <option value="Highway Stop 4">Highway Stop 4</option>
+        <option value="Downtown EV Zone">Downtown EV Zone</option>
+      </select>
+      <label style="margin-top:20px;">Available Charging Points</label>
+      <div class="slots ev-slots-grid" id="ev_slots"></div>
+      <div style="margin-top:20px; font-size:12px; color:#666; text-align:center; display:flex; justify-content:center; gap:15px;">
+        <span style="color:var(--success)">⚡ Green = Available</span> 
+        <span style="color:var(--danger)">🔴 Red = Busy Right Now</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="text-align:left; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:20px;">Booking Details</h3>
+      <div class="summary-row"><span>Station:</span> <span id="ev_dArea" style="font-weight:bold">Tech Park Hub</span></div>
+      <div class="summary-row"><span>Point:</span> <span id="ev_dSlot" style="font-weight:bold">—</span></div>
+      
+      <label>Start Charging</label>
+      <div class="radio-group">
+        <label><input type="radio" name="ev_timing" value="now" checked onchange="toggleEvTime(this)"> Now</label>
+        <label><input type="radio" name="ev_timing" value="later" onchange="toggleEvTime(this)"> Schedule Later</label>
+      </div>
+
+      <div id="ev_time_input_container" style="display:none;">
+        <label>Start Time</label>
+        <input type="datetime-local" id="ev_start">
+      </div>
+      
+      <div id="ev_time_display_container" style="margin-top:10px;">
+        <div style="font-size:14px; display:flex; justify-content:space-between; color:var(--ev-primary-dark);">
+          <b>Start Time:</b> <span id="ev_startTimeDisplay">...</span>
+        </div>
+      </div>
+
+      <label>Car Registration Number</label>
+      <input type="text" id="ev_reg" placeholder="E.G. AB-12-CD-3456" style="text-transform: uppercase;">
+      
+      <label>Duration</label>
+      <select id="ev_hours"></select>
+
+      <div style="margin-top:20px; padding:15px; background:#f0fdf4; border: 1px solid #bbf7d0; border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+          <span style="font-size:14px; color: var(--primary-dark)"><b>End Time:</b></span>
+          <span id="ev_dEnd" style="font-size:14px; color: var(--primary-dark)">—</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; border-top: 1px dashed #bbf7d0; padding-top: 8px;">
+          <span style="font-size:16px; color: var(--primary-dark)"><b>Total Charges:</b></span>
+          <span style="font-size:16px; font-weight:bold; color: var(--primary-dark)">₹<span id="ev_cost">0</span></span>
+        </div>
+      </div>
+      <button class="primary-btn" onclick="confirmAndPay('ev')">Confirm & Pay</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!--                    PART 4: PAYMENT                                     -->
+<!-- ====================================================================== -->
+<div id="view-payment" class="view-section">
+  <h1 class="ev-header">💳 Payment</h1>
+  <div class="card" style="max-width: 500px; margin: auto;">
+    <h3 style="text-align:left; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:20px;">Booking Summary</h3>
+
+    <div class="summary-row"><span>Type:</span> <span id="pay_type" style="font-weight:bold"></span></div>
+    <div class="summary-row"><span>Location:</span> <span id="pay_area" style="font-weight:bold"></span></div>
+    <div class="summary-row"><span>Slot:</span> <span id="pay_slot" style="font-weight:bold"></span></div>
+    <div class="summary-row"><span>Duration:</span> <span id="pay_duration" style="font-weight:bold"></span></div>
+    <div class="summary-row" style="margin-top: 15px; border-top: 2px dashed #e2e8f0; padding-top: 15px;">
+        <span style="font-size: 18px; font-weight: bold;">Total:</span> 
+        <span style="font-size: 18px; font-weight: bold; color: var(--primary-dark);">₹<span id="pay_amount"></span></span>
+    </div>
+
+    <button class="primary-btn" onclick="completePayment()" style="margin-top: 25px;">Pay Now</button>
+    <button class="danger-btn" onclick="cancelPayment()" style="width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px;">Cancel</button>
+  </div>
+</div>
+
+<script>
+  // ======================================================================
+  //                    SHARED STATE & INITIALIZATION
+  // ======================================================================
+  
+  let currentUser = null;
+  let selectedSlot = null;
+  let pendingBooking = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    populateDurationOptions('p_hours');
+    populateDurationOptions('ev_hours');
+
+    const storedUser = sessionStorage.getItem('user');
+    if (storedUser) {
+      currentUser = JSON.parse(storedUser);
+      showView('dashboard');
+    } else {
+      showView('login');
+    }
+    
+    setupDateConstraints();
+    
+    // Enter key support for login
+    const handleEnter = (e) => { if (e.key === 'Enter') performLogin(); };
+    document.getElementById('loginId').addEventListener('keypress', handleEnter);
+    document.getElementById('loginPass').addEventListener('keypress', handleEnter);
+    
+    // Listeners for triggers
+    document.getElementById('p_hours').addEventListener('change', () => { calculateEndTime('parking'); renderSlots('parking'); });
+    document.getElementById('ev_hours').addEventListener('change', () => { calculateEndTime('ev'); renderSlots('ev'); });
+    document.getElementById('p_start').addEventListener('change', () => { calculateEndTime('parking'); renderSlots('parking'); });
+    document.getElementById('ev_start').addEventListener('change', () => { calculateEndTime('ev'); renderSlots('ev'); });
+    
+    document.getElementById('p_area').addEventListener('change', (e) => {
+        document.getElementById('p_dArea').innerText = e.target.value;
+        renderSlots('parking'); 
+    });
+    
+    document.getElementById('ev_area').addEventListener('change', (e) => {
+        document.getElementById('ev_dArea').innerText = e.target.value;
+        renderSlots('ev'); 
+    });
+  });
+
+  function showView(viewId) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    const targetView = document.getElementById('view-' + viewId);
+    if(targetView) targetView.classList.add('active');
+
+    const nav = document.getElementById('mainNav');
+    if (viewId === 'login') {
+      nav.style.display = 'none';
+      document.body.classList.remove('ev-mode');
+    } else {
+      nav.style.display = 'flex';
+      if (viewId === 'ev') document.body.classList.add('ev-mode');
+      else document.body.classList.remove('ev-mode');
+
+      document.querySelectorAll('.nav-links button').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById('btn-' + viewId);
+      if(btn) btn.classList.add('active');
+    }
+
+    if (viewId === 'dashboard') renderDashboard();
+    if (viewId === 'parking') renderSlots('parking');
+    if (viewId === 'ev') { renderSlots('ev'); initEvTime(); }
+  }
+
+  // ======================================================================
+  //                    PART 1 LOGIC: LOGIN & DASHBOARD
+  // ======================================================================
+
+  async function performLogin() {
+    const id = document.getElementById('loginId').value.trim();
+    const pass = document.getElementById('loginPass').value.trim();
+    
+    if (!id || !pass) return alert("Please enter credentials");
+
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: id, password: pass })
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        currentUser = user;
+        sessionStorage.setItem('user', JSON.stringify(user));
+        showView('dashboard');
+      } else {
+        const err = await response.json();
+        alert(err.error || "Invalid username or password. Please try again.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to connect to the server.");
+    }
+  }
+
+  function logout() {
+    sessionStorage.removeItem('user');
+    currentUser = null;
+    document.getElementById('loginId').value = '';
+    document.getElementById('loginPass').value = '';
+    showView('login');
+  }
+
+  function renderDashboard() {
+    if(!currentUser) return;
+    document.getElementById('prof-username').innerText = currentUser.username;
+    document.getElementById('prof-name').innerText = currentUser.name;
+    document.getElementById('prof-email').innerText = currentUser.email;
+    document.getElementById('prof-phone').innerText = currentUser.phone;
+    renderMyBookings();
+  }
+
+  async function renderMyBookings() {
+    const tbody = document.querySelector('#bookingsTable tbody');
+    const msg = document.getElementById('noBookingsMsg');
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading...</td></tr>';
+    
+    try {
+      const res = await fetch(`/api/bookings?username=${currentUser.username}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const userBookings = await res.json();
+      
+      tbody.innerHTML = '';
+      if (userBookings.length === 0) {
+        msg.style.display = 'block';
+        return;
+      }
+      
+      msg.style.display = 'none';
+
+      userBookings.sort((a, b) => b.id - a.id).forEach(b => {
+        const typeLabel = b.type === 'parking' 
+          ? `<span class="badge badge-park">Parking</span>` 
+          : `<span class="badge badge-ev">EV Charge</span>`;
+
+        const now = new Date().getTime();
+        const startTime = new Date(b.startTime).getTime();
+        const canCancel = (startTime - now) > (5 * 60 * 1000);
+
+        const actionBtn = canCancel 
+          ? `<button class="danger-btn" onclick="cancelBooking(${b.id}, '${b.type}', '${b.startTime}')">Cancel</button>`
+          : `<button class="danger-btn" style="background:#cbd5e1; color:#64748b; cursor:not-allowed;" disabled title="Cannot cancel within 5 mins of start time">Locked</button>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>#${b.id}</b></td>
+          <td>${typeLabel}</td>
+          <td>${b.area}</td>
+          <td><b>${b.slot}</b></td>
+          <td>${b.regNo}</td>
+          <td>${new Date(b.startTime).toLocaleString()}</td>
+          <td>${new Date(b.endTime).toLocaleString()}</td>
+          <td>${actionBtn}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch(e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: red;">Failed to load bookings.</td></tr>';
+    }
+  }
+
+  async function cancelBooking(id, type, startTimeStr) {
+    const now = new Date().getTime();
+    const startTime = new Date(startTimeStr).getTime();
+    if ((startTime - now) <= (5 * 60 * 1000)) {
+      alert("Cancellations are only allowed up to 5 minutes before the start time.");
+      return;
+    }
+
+    if(!confirm("Are you sure you want to cancel this booking?")) return;
+    
+    try {
+      const res = await fetch(`/api/bookings?id=${id}&type=${type}`, { method: 'DELETE' });
+      if(res.ok) {
+        renderMyBookings();
+      } else {
+        alert("Failed to cancel booking.");
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Network error.");
+    }
+  }
+
+  // ======================================================================
+  //               PART 2 & 3 LOGIC: BOOKING, TIMES & SLOTS
+  // ======================================================================
+
+  function populateDurationOptions(id) {
+    const select = document.getElementById(id);
+    select.innerHTML = '';
+    let minutes = 15;
+    const maxMinutes = 24 * 60;
+    while (minutes <= maxMinutes) {
+        const hrs = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        let text = '';
+        if (hrs > 0) text += `${hrs} hr${hrs > 1 ? 's' : ''} `;
+        if (mins > 0) text += `${mins} min`;
+        const option = document.createElement('option');
+        option.value = (minutes / 60).toString();
+        option.text = text.trim();
+        if (minutes === 60) option.selected = true;
+        select.appendChild(option);
+        minutes += (minutes < 120) ? 15 : 30;
+    }
+  }
+
+  function setNow(inputId) {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById(inputId).value = now.toISOString().slice(0, 16);
+    const type = inputId.startsWith('p') ? 'parking' : 'ev';
+    calculateEndTime(type);
+    renderSlots(type);
+  }
+
+  function initEvTime() {
+    const radio = document.querySelector('input[name="ev_timing"]:checked');
+    if(radio) toggleEvTime(radio);
+  }
+
+  function toggleEvTime(radio) {
+    const inputContainer = document.getElementById('ev_time_input_container');
+    const displayContainer = document.getElementById('ev_time_display_container');
+    const displaySpan = document.getElementById('ev_startTimeDisplay');
+    const input = document.getElementById('ev_start');
+
+    if (radio.value === 'now') {
+      inputContainer.style.display = 'none';
+      displayContainer.style.display = 'block';
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      input.value = now.toISOString().slice(0, 16);
+      displaySpan.innerText = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      calculateEndTime('ev');
+      renderSlots('ev');
+    } else {
+      inputContainer.style.display = 'block';
+      displayContainer.style.display = 'none';
+      if(!input.value) setNow('ev_start');
+    }
+  }
+
+  function setupDateConstraints() {
+    const inputs = ['p_start', 'ev_start'];
+    const now = new Date();
+    const maxDate = new Date();
+    maxDate.setDate(now.getDate() + 3);
+
+    const minStr = now.toISOString().slice(0, 16);
+    const maxStr = maxDate.toISOString().slice(0, 16);
+
+    inputs.forEach(id => {
+      const el = document.getElementById(id);
+      if(el) {
+        el.min = minStr;
+        el.max = maxStr;
+        el.addEventListener('change', () => calculateEndTime(id.startsWith('p') ? 'parking' : 'ev'));
+      }
+    });
+  }
+
+  function calculateAmount(type, hours) {
+    let amount = 0;
+    if (type === 'ev') {
+      amount = Math.ceil(hours) * 50;
+    } else {
+      let totalMinutes = hours * 60;
+      if (totalMinutes <= 30) {
+        amount = 20;
+      } else {
+        amount = 20;
+        let remaining = totalMinutes - 30;
+        amount += Math.ceil(remaining / 15) * 5;
+      }
+    }
+    return amount;
+  }
+
+  function calculateEndTime(type) {
+    const prefix = type === 'parking' ? 'p_' : 'ev_';
+    const startVal = document.getElementById(prefix + 'start').value;
+    const hours = parseFloat(document.getElementById(prefix + 'hours').value);
+    
+    if (startVal && !isNaN(hours)) {
+      const start = new Date(startVal);
+      const end = new Date(start.getTime() + (hours * 60 * 60 * 1000));
+      document.getElementById(prefix + 'dEnd').innerText = end.toLocaleDateString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+      
+      const cost = calculateAmount(type, hours);
+      document.getElementById(prefix + 'cost').innerText = cost;
+    }
+  }
+
+  async function renderSlots(type) {
+    const container = document.getElementById(type === 'parking' ? 'p_slots' : 'ev_slots');
+    container.innerHTML = '<p style="grid-column: 1 / -1; text-align: center;">Loading availability...</p>';
+    selectedSlot = null;
+    updateDisplayInfo(type);
+
+    try {
+      const res = await fetch('/api/bookings');
+      const allBookings = res.ok ? await res.json() : [];
+
+      container.innerHTML = ''; // clear loading text
+      const currentArea = document.getElementById(type === 'parking' ? 'p_area' : 'ev_area').value;
+
+      const prefix = type === 'parking' ? 'p_' : 'ev_';
+      const startVal = document.getElementById(prefix + 'start').value;
+      const hoursVal = parseFloat(document.getElementById(prefix + 'hours').value);
+      
+      let checkStart = new Date().getTime();
+      let checkEnd = checkStart + (15 * 60 * 1000); 
+
+      if (startVal && !isNaN(hoursVal)) {
+          checkStart = new Date(startVal).getTime();
+          checkEnd = checkStart + (hoursVal * 60 * 60 * 1000);
+      }
+
+      if (type === 'parking') {
+        ['A', 'B', 'C'].forEach(row => {
+          for (let i = 1; i <= 5; i++) {
+            createSlotElement(container, row + i, 'parking', allBookings, checkStart, checkEnd, currentArea);
+          }
+        });
+      } else {
+        for (let i = 1; i <= 12; i++) {
+          createSlotElement(container, `CP-${i}`, 'ev', allBookings, checkStart, checkEnd, currentArea);
+        }
+      }
+    } catch(e) {
+      container.innerHTML = '<p style="grid-column: 1 / -1; color: red;">Failed to load slots.</p>';
+    }
+  }
+
+  function createSlotElement(container, id, type, allBookings, checkStart, checkEnd, currentArea) {
+    const div = document.createElement('div');
+    const isBusy = allBookings.some(b => {
+      if (b.slot !== id || b.type !== type || b.area !== currentArea) return false;
+      const bStart = new Date(b.startTime).getTime();
+      const bEnd = new Date(b.endTime).getTime();
+      return (checkStart < bEnd) && (checkEnd > bStart);
+    });
+
+    if (type === 'ev') {
+      div.className = 'slot ev-card';
+      if (isBusy) {
+        div.classList.add('busy');
+        div.innerHTML = `<i>⚡</i><span class="slot-id">${id}</span><small>Occupied</small>`;
+      } else {
+        div.innerHTML = `<i>⚡</i><span class="slot-id">${id}</span><small>Available</small>`;
+        div.onclick = () => selectSlot(div, id, type);
+      }
+    } else {
+      div.className = 'slot';
+      if (isBusy) {
+        div.classList.add('busy');
+        div.innerHTML = `<span class="slot-number">${id}</span><small>Occupied</small>`;
+      } else {
+        div.innerHTML = `<span class="slot-number">${id}</span><small>Available</small>`;
+        div.onclick = () => selectSlot(div, id, type);
+      }
+    }
+    container.appendChild(div);
+  }
+
+  function selectSlot(el, id, type) {
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedSlot = { id, type };
+    updateDisplayInfo(type);
+  }
+
+  function updateDisplayInfo(type) {
+    const prefix = type === 'parking' ? 'p_' : 'ev_';
+    document.getElementById(prefix + 'dSlot').innerText = selectedSlot ? selectedSlot.id : '—';
+  }
+
+  async function confirmAndPay(type) {
+    const prefix = type === 'parking' ? 'p_' : 'ev_';
+    const regNo = document.getElementById(prefix + 'reg').value.toUpperCase();
+    const hours = parseFloat(document.getElementById(prefix + 'hours').value);
+    const area = document.getElementById(prefix + 'area').value;
+
+    let startVal;
+    if (type === 'ev') {
+      const selectedOption = document.querySelector('input[name="ev_timing"]:checked');
+      if (selectedOption && selectedOption.value === 'now') {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        startVal = now.toISOString().slice(0, 16);
+      } else {
+        startVal = document.getElementById('ev_start').value;
+      }
+    } else {
+      startVal = document.getElementById('p_start').value;
+    }
+
+    if (!selectedSlot || selectedSlot.type !== type) return alert("Please select a slot.");
+    if (!regNo) return alert("Please enter Car Registration Number.");
+    if (!startVal) return alert("Please set Start Time.");
+    
+    const startDate = new Date(startVal);
+    const now = new Date();
+    const threeDaysLater = new Date();
+    threeDaysLater.setDate(now.getDate() + 3);
+
+    if (startDate < new Date(now.getTime() - 120000)) return alert("Cannot book in the past!");
+    if (startDate > threeDaysLater) return alert("Booking allowed only for next 3 days.");
+
+    const endTime = new Date(startDate.getTime() + (hours * 60 * 60 * 1000));
+    const amount = calculateAmount(type, hours);
+
+    try {
+      const res = await fetch('/api/bookings');
+      const db = await res.json();
+      
+      const isConflict = db.some(b => {
+          if (b.slot !== selectedSlot.id || b.type !== type || b.area !== area) return false;
+          const bStart = new Date(b.startTime).getTime();
+          const bEnd = new Date(b.endTime).getTime();
+          return (startDate.getTime() < bEnd) && (endTime.getTime() > bStart);
+      });
+
+      if (isConflict) {
+          alert("Sorry, this slot is already booked for the selected time. Please choose another.");
+          renderSlots(type);
+          return;
+      }
+
+      pendingBooking = {
+        username: currentUser.username,
+        type: type,
+        area: area,
+        slot: selectedSlot.id,
+        regNo: regNo,
+        startTime: startDate.toISOString(),
+        endTime: endTime.toISOString(),
+        cost: amount 
+      };
+
+      // Fill payment UI
+      document.getElementById("pay_type").innerText = type === 'parking' ? "Smart Parking" : "EV Charging";
+      document.getElementById("pay_area").innerText = area;
+      document.getElementById("pay_slot").innerText = selectedSlot.id;
+      document.getElementById("pay_duration").innerText = hours + " hrs";
+      document.getElementById("pay_amount").innerText = amount;
+
+      showView('payment');
+    } catch(e) {
+      alert("Failed to verify slot availability.");
+    }
+  }
+
+  async function completePayment() {
+    if (!pendingBooking) return;
+    
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pendingBooking)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert("✅ Payment Successful & Booking Confirmed!\nBooking ID: " + data.id);
+        
+        const prefix = pendingBooking.type === 'parking' ? 'p_' : 'ev_';
+        document.getElementById(prefix + 'reg').value = '';
+        
+        pendingBooking = null;
+        showView('dashboard'); 
+      } else {
+        const err = await res.json();
+        alert("Booking failed: " + (err.error || "Unknown error"));
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Payment confirmation failed. Network error.");
+    }
+  }
+
+  function cancelPayment() {
+    pendingBooking = null;
+    showView('dashboard');
+  }
+</script>
+</body>
+</html>

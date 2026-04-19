@@ -1,0 +1,9 @@
+{
+  "name": "smart-city-parking-ev",
+  "version": "1.0.0",
+  "description": "Smart City Parking & EV Booking System",
+  "main": "index.html",
+  "dependencies": {
+    "mysql2": "^3.9.0"
+  }
+}
